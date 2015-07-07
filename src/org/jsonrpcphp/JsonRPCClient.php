@@ -70,6 +70,13 @@ class JsonRPCClient
     private $enableCurl = true;
 
     /**
+     * If true, reuses connection for subsequent RPC's
+     *
+     * @var boolean
+     */
+    private $keepAlive = false;
+
+    /**
      * Takes the connection parameters
      *
      * @param string $url
@@ -96,6 +103,54 @@ class JsonRPCClient
     public function setRPCNotification($notification)
     {
         empty($notification) ? $this->notification = false : $this->notification = true;
+    }
+
+    /**
+     * Sets whether to keep the connection alive after a
+     * request has been made.
+     *
+     * By setting keepAlive to true, the cURL channel
+     * used to communicate with the server will be reused
+     *
+     * @param boolean $keepAlive 
+     */
+    public function setKeepAlive($keepAlive)
+    {
+        $this->keepAlive = $keepAlive;
+    }
+
+    /**
+     * Returns whether the cURL channel is reused for
+     * subsequent requests
+     * 
+     * @return boolean
+     */
+    public function getKeepAlive()
+    {
+        return $this->keepAlive;
+    }
+
+    /**
+     * Initializes a cURL channel and returns
+     * its handle
+     *
+     * @return resource
+     */
+    private function getCurlHandle()
+    {
+        static $ch = null;
+        if ($ch === null || !$this->keepAlive) {
+            $ch = curl_init($this->url);
+
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'Content-type: application/json'
+            ));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        }
+        return $ch;
     }
 
     /**
@@ -142,13 +197,8 @@ class JsonRPCClient
         // performs the HTTP POST
         if ($this->enableCurl && is_callable('curl_init')) {
             // use curl when available; solves problems with allow_url_fopen
-            $ch = curl_init($this->url);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                'Content-type: application/json'
-            ));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            //$ch = curl_init($this->url);
+            $ch = $this->getCurlHandle();
             curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
             $response = curl_exec($ch);
             if ($response === false) {
